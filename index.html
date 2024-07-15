@@ -2,6 +2,7 @@
 <html>
 <head>
     <title>Student Information Form</title>
+    <link rel="icon" type="image/x-icon" href="smartlocker_logo.png">
     <script src="https://www.gstatic.com/firebasejs/8.6.7/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.6.7/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.6.7/firebase-database.js"></script>
@@ -41,7 +42,7 @@
             font-size: 18px;
             width: 393px;
         }
-        #department {
+        #department, #gender {
             width: 400px;
             font-size: 17px;
         }
@@ -54,11 +55,14 @@
             padding-right: 79px;
         }
         #reminderText {
-            /* position: absolute;
+            font-weight: 400;
             padding: 10px;
-            left: 381px;
             background: rgba(255, 250, 249, 0.5);
-            border-radius: 10px; */
+            border-radius: 10px;
+            display: none;
+            text-align: center;
+        }
+        #existingAccountText {
             font-weight: 400;
             padding: 10px;
             background: rgba(255, 250, 249, 0.5);
@@ -72,16 +76,24 @@
     <div class="contents">
         <h1>Student Information Form</h1>
         <form id="studentForm">
-            <label class="studId" for="studentId" class="studId">Student ID:</label><br>
+            <label for="studentId">Student ID:</label><br>
             <input type="text" id="studentId" name="studentId" required pattern="\d{2}-\d{4}" title="Student ID format should be NN-NNNN"><br>
             <span id="studentIdError" class="error"></span><br>
             
-            <label class="studName"for="name">Name:</label><br>
-            <input type="text" id="name" name="name" required pattern="[A-Za-z\s]+" title="Name should only contain letters and spaces"><br>
+            <label for="name">Name:</label><br>
+            <input type="text" id="name" name="name" pattern="[A-Za-z\s]+" title="Name should only contain letters and spaces"><br>
             <span id="nameError" class="error"></span><br>
             
-            <label class="studDept" for="department">Department:</label><br>
-            <select id="department" name="department" required>
+            <label for="gender">Gender:</label><br>
+            <select id="gender" name="gender">
+                <option value="">Select Gender</option>
+                <option value="Male">Male</option>
+                <option value="Female">Female</option>
+                <option value="Prefer not to say">Prefer not to say</option>
+            </select><br><br>
+
+            <label for="department">Department:</label><br>
+            <select id="department" name="department">
                 <option value="">Select Department</option>
                 <option value="CCMS">College of Computing and Multimedia Studies</option>
                 <option value="CBPA">College of Business and Public Administration</option>
@@ -98,6 +110,7 @@
         <h2>Generated Barcode:</h2>
         <svg id="barcode"></svg>
         <p id="reminderText" style="display:none;">Please take a screenshot or photo of the generated barcode for future use of locker.</p>
+        <p id="existingAccountText" style="display:none;">This student account already exists. Please take a screenshot or photo of the barcode for future use of locker.</p>
     </div>
 
     <script>
@@ -124,27 +137,38 @@
             var studentId = document.getElementById('studentId').value;
             var name = document.getElementById('name').value;
             var department = document.getElementById('department').value;
+            var gender = document.getElementById('gender').value;
 
             // Clear previous errors
             clearErrors();
 
-            if (!validateForm(studentId, name, department)) {
+            if (studentId !== "" && name === "" && department === "" && gender === "") {
+                // Only student ID is filled
+                checkStudentIdExists(studentId, function(exists) {
+                    if (exists) {
+                        generateBarcode(studentId);
+                        document.getElementById('existingAccountText').style.display = 'block';
+                    } else {
+                        alert('Student ID does not exist.');
+                    }
+                });
+            } else if (!validateForm(studentId, name, department, gender)) {
                 return;
+            } else {
+                checkStudentIdExists(studentId, function(exists) {
+                    if (exists) {
+                        alert('Student ID already exists. Please use a different ID.');
+                    } else {
+                        saveStudentData(studentId, name, department, gender);
+                        generateBarcode(studentId);
+                        document.getElementById('studentForm').reset();
+                        document.getElementById('reminderText').style.display = 'block';
+                    }
+                });
             }
-
-            checkStudentIdExists(studentId, function(exists) {
-                if (exists) {
-                    alert('Student ID already exists. Please use a different ID.');
-                } else {
-                    saveStudentData(studentId, name, department);
-                    generateBarcode(studentId);
-                    document.getElementById('studentForm').reset();
-                    document.getElementById('reminderText').style.display = 'block';
-                }
-            });
         }
 
-        function validateForm(studentId, name, department) {
+        function validateForm(studentId, name, department, gender) {
             let isValid = true;
 
             if (!/^\d{2}-\d{4}$/.test(studentId)) {
@@ -162,12 +186,18 @@
                 isValid = false;
             }
 
+            if (gender === "") {
+                alert("Please select a gender.");
+                isValid = false;
+            }
+
             return isValid;
         }
 
         function clearErrors() {
             document.getElementById('studentIdError').innerText = "";
             document.getElementById('nameError').innerText = "";
+            document.getElementById('existingAccountText').style.display = 'none';
         }
 
         function checkStudentIdExists(studentId, callback) {
@@ -179,10 +209,11 @@
             });
         }
 
-        function saveStudentData(studentId, name, department) {
+        function saveStudentData(studentId, name, department, gender) {
             firebase.database().ref('Students/' + studentId).set({
                 Name: name,
-                Department: department
+                Department: department,
+                Gender: gender
             }).then(function() {
                 alert('Student data saved successfully.');
             }).catch(function(error) {
